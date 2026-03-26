@@ -1,240 +1,328 @@
 /**
- * app.js - Main application logic for Dashboard
+ * CFSPL Cheque Tracker — app.js
+ * Handles login, dashboard logic, localStorage, and UI interactions.
  */
 
-const App = {
-    currentFilter: 'all',
+const CORRECT_PASSWORD = 'Nava@123';
+const STORAGE_BRANCH   = 'cfspl_branch';
+const STORAGE_RECORDS  = 'cfspl_records';
 
-    init() {
-        this.renderTasks();
-        this.setupEventListeners();
-    },
+/* ═══════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════ */
 
-    setupEventListeners() {
-        document.getElementById('taskForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.saveTask();
-        });
+function getRecords() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_RECORDS)) || [];
+  } catch {
+    return [];
+  }
+}
 
-        document.getElementById('toggleSidebar').addEventListener('click', () => {
-            document.getElementById('sidebar').classList.toggle('collapsed');
-        });
-    },
+function saveRecords(records) {
+  localStorage.setItem(STORAGE_RECORDS, JSON.stringify(records));
+}
 
-    renderTasks() {
-        const tasks = DataStore.getTasks();
-        const grid = document.getElementById('taskGrid');
-        grid.innerHTML = '';
+function showAlert(alertEl, textEl, message, type) {
+  alertEl.className = `alert alert-${type} show`;
+  textEl.textContent = message;
+}
 
-        let filteredTasks = tasks;
-        if (this.currentFilter === 'progress') {
-            filteredTasks = tasks.filter(t => !t.completed);
-        } else if (this.currentFilter === 'completed') {
-            filteredTasks = tasks.filter(t => t.completed);
-        }
+function hideAlert(alertEl) {
+  alertEl.classList.remove('show');
+}
 
-        const searchQuery = document.getElementById('searchInput').value.toLowerCase();
-        if (searchQuery) {
-            filteredTasks = filteredTasks.filter(t => 
-                t.issueDescription.toLowerCase().includes(searchQuery) ||
-                t.id.toLowerCase().includes(searchQuery) ||
-                t.branch.toLowerCase().includes(searchQuery) ||
-                t.staffName?.toLowerCase().includes(searchQuery)
-            );
-        }
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-IN', {
+    day:   '2-digit',
+    month: 'short',
+    year:  'numeric',
+  }) + ', ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
 
-        filteredTasks.forEach(task => {
-            const card = document.createElement('div');
-            card.className = `task-card ${task.completed ? 'completed' : ''}`;
-            card.onclick = () => this.openModal(task.id);
-            
-            card.innerHTML = `
-                <div class="task-meta">
-                    <span>${task.id}</span> • <span>${task.timestamp}</span>
-                </div>
-                <h3>${task.issueDescription}</h3>
-                <div class="task-meta">
-                    <span>${task.branch}</span> • <span>${task.hoco}</span>
-                </div>
-                <div>
-                    <span class="badge badge-${task.issueType.toLowerCase()}">${task.issueType}</span>
-                    ${task.completed ? '<span class="badge" style="background: #22c55e22; color: #16a34a;">Completed</span>' : ''}
-                </div>
-            `;
-            grid.appendChild(card);
-        });
+/* ═══════════════════════════════════════════
+   LOGIN PAGE
+═══════════════════════════════════════════ */
 
-        if (filteredTasks.length === 0) {
-            grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">No tasks found.</p>';
-        }
-    },
+function initLoginPage() {
+  // If already logged in, skip to dashboard
+  if (localStorage.getItem(STORAGE_BRANCH)) {
+    window.location.replace('dashboard.html');
+    return;
+  }
 
-    filterTasks(filter) {
-        this.currentFilter = filter;
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        event.target.classList.add('active');
-        
-        const titles = { all: 'All Tasks', progress: 'In Progress', completed: 'Completed Tasks' };
-        document.getElementById('pageTitle').textContent = titles[filter];
-        
-        this.renderTasks();
-    },
+  const form        = document.getElementById('loginForm');
+  const branchSel   = document.getElementById('branchSelect');
+  const passwordInp = document.getElementById('passwordInput');
+  const alertEl     = document.getElementById('loginAlert');
+  const alertText   = document.getElementById('loginAlertText');
 
-    searchTasks() {
-        this.renderTasks();
-    },
+  if (!form) return;
 
-    openModal(taskId = null) {
-        const modal = document.getElementById('taskModal');
-        const form = document.getElementById('taskForm');
-        form.reset();
-        
-        document.getElementById('staffFields').classList.add('hidden');
-        document.getElementById('completionTimeGroup').classList.add('hidden');
-        document.getElementById('deleteBtn').classList.add('hidden');
-        document.getElementById('completeBtn').classList.remove('hidden');
-        document.getElementById('saveBtn').disabled = false;
-        
-        if (taskId) {
-            // Edit Mode
-            const task = DataStore.getTasks().find(t => t.id === taskId);
-            document.getElementById('modalTitle').textContent = 'Edit Task';
-            document.getElementById('taskId').value = task.id;
-            document.getElementById('displayTaskId').value = task.id;
-            document.getElementById('taskTimestamp').value = task.timestamp;
-            document.getElementById('branch').value = task.branch;
-            document.getElementById('hoco').value = task.hoco;
-            document.getElementById('issueType').value = task.issueType;
-            document.getElementById('issueDescription').value = task.issueDescription;
-            document.getElementById('solution').value = task.solution;
-            document.getElementById('detailedDescription').value = task.detailedDescription;
-            document.getElementById('amount').value = task.amount;
-            document.getElementById('deleteBtn').classList.remove('hidden');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    hideAlert(alertEl);
 
-            if (task.hoco !== 'None') {
-                document.getElementById('staffFields').classList.remove('hidden');
-                document.getElementById('staffName').value = task.staffName;
-                document.getElementById('staffId').value = task.staffId;
-            }
+    const branch   = branchSel.value.trim();
+    const password = passwordInp.value;
 
-            if (task.completed) {
-                document.getElementById('completionTimeGroup').classList.remove('hidden');
-                document.getElementById('completionTimestamp').value = task.completionTimestamp;
-                document.getElementById('completeBtn').classList.add('hidden');
-                document.getElementById('saveBtn').disabled = true;
-                // Lock fields
-                this.toggleFormFields(true);
-            } else {
-                this.toggleFormFields(false);
-            }
-        } else {
-            // Add Mode
-            document.getElementById('modalTitle').textContent = 'Add New Task';
-            const newId = DataStore.generateTaskId();
-            document.getElementById('taskId').value = newId;
-            document.getElementById('displayTaskId').value = newId;
-            document.getElementById('taskTimestamp').value = new Date().toLocaleString();
-            this.toggleFormFields(false);
-        }
-
-        modal.style.display = 'flex';
-    },
-
-    closeModal() {
-        document.getElementById('taskModal').style.display = 'none';
-    },
-
-    toggleStaffFields() {
-        const hoco = document.getElementById('hoco').value;
-        const fields = document.getElementById('staffFields');
-        if (hoco === 'HO' || hoco === 'CO') {
-            fields.classList.remove('hidden');
-        } else {
-            fields.classList.add('hidden');
-        }
-    },
-
-    toggleFormFields(disabled) {
-        const form = document.getElementById('taskForm');
-        const elements = form.querySelectorAll('input, select, textarea');
-        elements.forEach(el => {
-            if (el.id !== 'displayTaskId' && el.id !== 'taskTimestamp' && el.id !== 'completionTimestamp') {
-                el.disabled = disabled;
-            }
-        });
-    },
-
-    saveTask() {
-        const taskData = this.getFormData();
-        const existingTask = DataStore.getTasks().find(t => t.id === taskData.id);
-
-        if (existingTask) {
-            DataStore.updateTask({...existingTask, ...taskData});
-        } else {
-            DataStore.addTask(taskData);
-        }
-
-        this.closeModal();
-        this.renderTasks();
-    },
-
-    getFormData() {
-        return {
-            id: document.getElementById('taskId').value,
-            timestamp: document.getElementById('taskTimestamp').value,
-            branch: document.getElementById('branch').value,
-            hoco: document.getElementById('hoco').value,
-            staffName: document.getElementById('staffName').value,
-            staffId: document.getElementById('staffId').value,
-            issueType: document.getElementById('issueType').value,
-            issueDescription: document.getElementById('issueDescription').value,
-            solution: document.getElementById('solution').value,
-            detailedDescription: document.getElementById('detailedDescription').value,
-            amount: document.getElementById('amount').value,
-            completed: false
-        };
-    },
-
-    completeTask() {
-        if (confirm('Are you sure you want to mark this task as completed? This will lock the task for further edits.')) {
-            const taskId = document.getElementById('taskId').value;
-            const tasks = DataStore.getTasks();
-            const taskIndex = tasks.findIndex(t => t.id === taskId);
-            
-            if (taskIndex !== -1) {
-                // Get current form data first to ensure latest changes are saved
-                const formData = this.getFormData();
-                tasks[taskIndex] = {
-                    ...tasks[taskIndex],
-                    ...formData,
-                    completed: true,
-                    completionTimestamp: new Date().toLocaleString()
-                };
-                DataStore.saveTasks(tasks);
-                this.closeModal();
-                this.renderTasks();
-            } else {
-                // If it's a new task being completed immediately
-                const taskData = this.getFormData();
-                taskData.completed = true;
-                taskData.completionTimestamp = new Date().toLocaleString();
-                DataStore.addTask(taskData);
-                this.closeModal();
-                this.renderTasks();
-            }
-        }
-    },
-
-    deleteTask() {
-        if (confirm('Are you sure you want to delete this task?')) {
-            const taskId = document.getElementById('taskId').value;
-            DataStore.deleteTask(taskId);
-            this.closeModal();
-            this.renderTasks();
-        }
+    if (!branch) {
+      showAlert(alertEl, alertText, 'Please select a branch to continue.', 'error');
+      branchSel.focus();
+      return;
     }
-};
 
-// Initialize App
-document.addEventListener('DOMContentLoaded', () => App.init());
-window.App = App;
+    if (!password) {
+      showAlert(alertEl, alertText, 'Please enter your password.', 'error');
+      passwordInp.focus();
+      return;
+    }
+
+    if (password !== CORRECT_PASSWORD) {
+      showAlert(alertEl, alertText, 'Incorrect password. Please try again.', 'error');
+      passwordInp.value = '';
+      passwordInp.focus();
+      return;
+    }
+
+    // Success
+    localStorage.setItem(STORAGE_BRANCH, branch);
+    window.location.replace('dashboard.html');
+  });
+}
+
+/* ═══════════════════════════════════════════
+   DASHBOARD PAGE
+═══════════════════════════════════════════ */
+
+function initDashboardPage() {
+  const branch = localStorage.getItem(STORAGE_BRANCH);
+
+  // Guard: not logged in
+  if (!branch) {
+    window.location.replace('index.html');
+    return;
+  }
+
+  // Populate branch display
+  const headerBranch  = document.getElementById('headerBranch');
+  const branchSubtitle = document.getElementById('branchSubtitle');
+  if (headerBranch)   headerBranch.textContent  = branch;
+  if (branchSubtitle) branchSubtitle.textContent = `Managing cheque records for ${branch}`;
+
+  // Logout
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function () {
+      localStorage.removeItem(STORAGE_BRANCH);
+      localStorage.removeItem(STORAGE_RECORDS);
+      window.location.replace('index.html');
+    });
+  }
+
+  // Radio buttons – show/hide conditional fields
+  const radioYes     = document.getElementById('radioYes');
+  const radioNo      = document.getElementById('radioNo');
+  const labelYes     = document.getElementById('radioLabelYes');
+  const labelNo      = document.getElementById('radioLabelNo');
+  const fieldReason  = document.getElementById('fieldReason');
+  const fieldLocation= document.getElementById('fieldLocation');
+
+  function updateRadioUI(value) {
+    if (value === 'Yes') {
+      fieldLocation.classList.add('visible');
+      fieldReason.classList.remove('visible');
+      labelYes.classList.add('selected');
+      labelNo.classList.remove('selected');
+      document.getElementById('chequeReason').value = '';
+    } else if (value === 'No') {
+      fieldReason.classList.add('visible');
+      fieldLocation.classList.remove('visible');
+      labelNo.classList.add('selected');
+      labelYes.classList.remove('selected');
+      document.getElementById('chequeLocation').value = '';
+    } else {
+      fieldReason.classList.remove('visible');
+      fieldLocation.classList.remove('visible');
+      labelYes.classList.remove('selected');
+      labelNo.classList.remove('selected');
+    }
+  }
+
+  if (radioYes) radioYes.addEventListener('change', () => updateRadioUI('Yes'));
+  if (radioNo)  radioNo.addEventListener('change',  () => updateRadioUI('No'));
+
+  // Form submission
+  const form       = document.getElementById('entryForm');
+  const formAlert  = document.getElementById('formAlert');
+  const formAlertT = document.getElementById('formAlertText');
+
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      hideAlert(formAlert);
+
+      const customerName   = document.getElementById('customerName').value.trim();
+      const customerLoanId = document.getElementById('customerLoanId').value.trim();
+      const chequeReceived = document.querySelector('input[name="chequeReceived"]:checked');
+      const chequeReason   = document.getElementById('chequeReason').value.trim();
+      const chequeLocation = document.getElementById('chequeLocation').value.trim();
+
+      // Validation
+      if (!customerName) {
+        showAlert(formAlert, formAlertT, 'Please enter the customer name.', 'error');
+        formAlert.className = 'alert alert-error show';
+        document.getElementById('customerName').focus();
+        return;
+      }
+
+      if (!customerLoanId) {
+        formAlert.className = 'alert alert-error show';
+        showAlert(formAlert, formAlertT, 'Please enter the customer Loan ID.', 'error');
+        document.getElementById('customerLoanId').focus();
+        return;
+      }
+
+      if (!chequeReceived) {
+        formAlert.className = 'alert alert-error show';
+        showAlert(formAlert, formAlertT, 'Please select whether the cheque was received or not.', 'error');
+        return;
+      }
+
+      if (chequeReceived.value === 'No' && !chequeReason) {
+        formAlert.className = 'alert alert-error show';
+        showAlert(formAlert, formAlertT, 'Please provide a reason for the cheque not being received.', 'error');
+        document.getElementById('chequeReason').focus();
+        return;
+      }
+
+      if (chequeReceived.value === 'Yes' && !chequeLocation) {
+        formAlert.className = 'alert alert-error show';
+        showAlert(formAlert, formAlertT, 'Please specify where the cheque is kept.', 'error');
+        document.getElementById('chequeLocation').focus();
+        return;
+      }
+
+      // Build record
+      const record = {
+        id:             Date.now(),
+        branch:         branch,
+        customerName:   customerName,
+        customerLoanId: customerLoanId,
+        chequeReceived: chequeReceived.value,
+        detail:         chequeReceived.value === 'Yes' ? chequeLocation : chequeReason,
+        timestamp:      new Date().toISOString(),
+      };
+
+      const records = getRecords();
+      records.push(record);
+      saveRecords(records);
+
+      // Reset form
+      form.reset();
+      updateRadioUI(null);
+
+      // Show success
+      formAlert.className = 'alert alert-success show';
+      showAlert(formAlert, formAlertT, `Record for "${customerName}" saved successfully!`, 'success');
+
+      setTimeout(() => hideAlert(formAlert), 4000);
+
+      // Re-render table
+      renderTable();
+    });
+  }
+
+  // Initial table render
+  renderTable();
+}
+
+/* ═══════════════════════════════════════════
+   RECORDS TABLE
+═══════════════════════════════════════════ */
+
+function renderTable() {
+  const container   = document.getElementById('recordsContainer');
+  const countEl     = document.getElementById('recordCount');
+  if (!container) return;
+
+  const records = getRecords();
+
+  if (countEl) {
+    countEl.textContent = records.length === 1 ? '1 record' : `${records.length} records`;
+  }
+
+  if (records.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6zm0 4h8v2H6zm4-4h8v2h-8z"/></svg>
+        <p>No records yet. Use the form above to add a cheque entry.</p>
+      </div>`;
+    return;
+  }
+
+  // Newest first
+  const sorted = [...records].reverse();
+
+  const rows = sorted.map((r, idx) => {
+    const badgeClass = r.chequeReceived === 'Yes' ? 'badge-yes' : 'badge-no';
+    const detailLabel = r.chequeReceived === 'Yes' ? 'Location' : 'Reason';
+    const escapedDetail = escapeHTML(r.detail || '—');
+    const escapedName   = escapeHTML(r.customerName);
+    const escapedLoanId = escapeHTML(r.customerLoanId);
+
+    return `
+      <tr>
+        <td>${sorted.length - idx}</td>
+        <td>${escapeHTML(r.branch)}</td>
+        <td>${escapedName}</td>
+        <td>${escapedLoanId}</td>
+        <td><span class="badge ${badgeClass}">${r.chequeReceived}</span></td>
+        <td><strong style="color:var(--text-muted);font-size:0.75rem;">${detailLabel}:</strong> ${escapedDetail}</td>
+        <td style="white-space:nowrap;">${formatDate(r.timestamp)}</td>
+      </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Branch</th>
+          <th>Customer Name</th>
+          <th>Loan ID</th>
+          <th>Cheque</th>
+          <th>Details</th>
+          <th>Date &amp; Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>`;
+}
+
+function escapeHTML(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/* ═══════════════════════════════════════════
+   INIT — detect which page we're on
+═══════════════════════════════════════════ */
+
+document.addEventListener('DOMContentLoaded', function () {
+  const path = window.location.pathname;
+
+  if (path.endsWith('dashboard.html')) {
+    initDashboardPage();
+  } else {
+    // index.html or root
+    initLoginPage();
+  }
+});
