@@ -23,6 +23,10 @@
     </div>
 
     <div class="header-right">
+      <button class="theme-toggle" title="Toggle theme">
+        <svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
       <div class="branch-badge" id="headerBranch">Loading...</div>
       <button class="btn-logout" id="logoutBtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -99,6 +103,28 @@
               id="chequeLocation"
               placeholder="e.g. Branch safe, File cabinet A-3..."
             />
+          </div>
+
+          <!-- Conditional: Attach cheque photo -->
+          <div class="form-group full-width conditional-field" id="fieldPhoto">
+            <label>Attach Cheque Photo</label>
+            <div class="photo-upload-box" id="photoDropZone">
+              <input type="file" id="chequePhoto" accept="image/*" capture="environment" />
+              <div class="photo-upload-placeholder" id="photoPlaceholder">
+                <svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor">
+                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                </svg>
+                <p>Click or drag &amp; drop cheque photo here</p>
+                <span>Supports JPG, PNG (max 5 MB)</span>
+              </div>
+              <div class="photo-preview" id="photoPreview">
+                <img id="photoPreviewImg" alt="Cheque preview" />
+                <button type="button" class="photo-remove-btn" id="photoRemoveBtn">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
 
         </div>
